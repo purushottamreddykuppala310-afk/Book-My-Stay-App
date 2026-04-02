@@ -1,167 +1,182 @@
 import java.util.*;
 
-// -------------------- RESERVATION --------------------
+// ==========================
+// CUSTOM EXCEPTIONS
+// ==========================
+class InvalidBookingException extends Exception {
+    public InvalidBookingException(String message) {
+        super(message);
+    }
+}
+
+class InvalidRoomTypeException extends Exception {
+    public InvalidRoomTypeException(String message) {
+        super(message);
+    }
+}
+
+class InsufficientInventoryException extends Exception {
+    public InsufficientInventoryException(String message) {
+        super(message);
+    }
+}
+
+// ==========================
+// ENTITY: Reservation
+// ==========================
 class Reservation {
+    private String reservationId;
     private String guestName;
     private String roomType;
-    private String assignedRoomId; // Assigned after confirmation
 
-    public Reservation(String guestName, String roomType) {
+    public Reservation(String reservationId, String guestName, String roomType) {
+        this.reservationId = reservationId;
         this.guestName = guestName;
         this.roomType = roomType;
     }
 
-    public String getGuestName() { return guestName; }
-    public String getRoomType() { return roomType; }
-
-    public void setAssignedRoomId(String roomId) {
-        this.assignedRoomId = roomId;
-    }
-
-    public String getAssignedRoomId() {
-        return assignedRoomId;
-    }
-
     @Override
     public String toString() {
-        return "Guest: " + guestName +
-                " | Room Type: " + roomType +
-                " | Room ID: " + assignedRoomId;
+        return "Reservation ID: " + reservationId +
+                ", Guest: " + guestName +
+                ", Room Type: " + roomType;
     }
 }
 
-// -------------------- INVENTORY SERVICE --------------------
-class InventoryService {
-    private Map<String, Integer> availability = new HashMap<>();
+// ==========================
+// INVENTORY MANAGER
+// ==========================
+class RoomInventory {
 
-    public void setAvailability(String roomType, int count) {
-        availability.put(roomType, count);
+    private Map<String, Integer> inventory = new HashMap<>();
+
+    public RoomInventory() {
+        inventory.put("STANDARD", 2);
+        inventory.put("DELUXE", 2);
+        inventory.put("SUITE", 1);
     }
 
-    public int getAvailability(String roomType) {
-        return availability.getOrDefault(roomType, 0);
+    public void validateRoomType(String roomType) throws InvalidRoomTypeException {
+        if (!inventory.containsKey(roomType)) {
+            throw new InvalidRoomTypeException("Invalid room type: " + roomType);
+        }
     }
 
-    public void decrementAvailability(String roomType) {
-        availability.put(roomType, availability.get(roomType) - 1);
+    public void checkAvailability(String roomType) throws InsufficientInventoryException {
+        int count = inventory.get(roomType);
+        if (count <= 0) {
+            throw new InsufficientInventoryException("No rooms available for: " + roomType);
+        }
     }
 
-    public void displayInventory() {
+    public void bookRoom(String roomType) {
+        inventory.put(roomType, inventory.get(roomType) - 1);
+    }
+
+    public void printInventory() {
         System.out.println("\nCurrent Inventory:");
-        for (String type : availability.keySet()) {
-            System.out.println(type + " -> " + availability.get(type));
+        for (String type : inventory.keySet()) {
+            System.out.println(type + " → " + inventory.get(type));
         }
     }
 }
 
-// -------------------- BOOKING REQUEST QUEUE --------------------
-class BookingRequestQueue {
-    private Queue<Reservation> queue = new LinkedList<>();
+// ==========================
+// VALIDATOR (FAIL-FAST)
+// ==========================
+class BookingValidator {
 
-    public void addRequest(Reservation reservation) {
-        queue.offer(reservation);
-    }
+    public static void validate(String reservationId, String guestName, String roomType)
+            throws InvalidBookingException {
 
-    public Reservation dequeue() {
-        return queue.poll(); // FIFO
-    }
-
-    public boolean isEmpty() {
-        return queue.isEmpty();
-    }
-}
-
-// -------------------- BOOKING SERVICE (ALLOCATION LOGIC) --------------------
-class BookingService {
-
-    private InventoryService inventoryService;
-
-    // Map Room Type -> Set of Allocated Room IDs
-    private Map<String, Set<String>> allocatedRooms = new HashMap<>();
-
-    public BookingService(InventoryService inventoryService) {
-        this.inventoryService = inventoryService;
-    }
-
-    public void processNextRequest(BookingRequestQueue queue) {
-
-        Reservation reservation = queue.dequeue();
-
-        if (reservation == null) {
-            System.out.println("No pending requests.");
-            return;
+        if (reservationId == null || reservationId.isEmpty()) {
+            throw new InvalidBookingException("Reservation ID cannot be empty.");
         }
 
-        String roomType = reservation.getRoomType();
-
-        // Step 1: Check Availability
-        if (inventoryService.getAvailability(roomType) <= 0) {
-            System.out.println("No available rooms for " + roomType);
-            return;
+        if (guestName == null || guestName.isEmpty()) {
+            throw new InvalidBookingException("Guest name cannot be empty.");
         }
 
-        // Step 2: Generate Unique Room ID
-        String roomId = generateRoomId(roomType);
-
-        // Step 3: Ensure uniqueness using Set
-        allocatedRooms.putIfAbsent(roomType, new HashSet<>());
-
-        if (allocatedRooms.get(roomType).contains(roomId)) {
-            System.out.println("Duplicate room ID detected! Allocation aborted.");
-            return;
-        }
-
-        // ---- ATOMIC LOGICAL OPERATION START ----
-        allocatedRooms.get(roomType).add(roomId);
-        inventoryService.decrementAvailability(roomType);
-        reservation.setAssignedRoomId(roomId);
-        // ---- ATOMIC LOGICAL OPERATION END ----
-
-        // Step 4: Confirm Reservation
-        System.out.println("Reservation Confirmed:");
-        System.out.println(reservation);
-    }
-
-    // Unique Room ID Generator
-    private String generateRoomId(String roomType) {
-        return roomType.substring(0, 1).toUpperCase() + UUID.randomUUID().toString().substring(0, 5);
-    }
-
-    public void displayAllocations() {
-        System.out.println("\nAllocated Rooms:");
-        for (String type : allocatedRooms.keySet()) {
-            System.out.println(type + " -> " + allocatedRooms.get(type));
+        if (roomType == null || roomType.isEmpty()) {
+            throw new InvalidBookingException("Room type cannot be empty.");
         }
     }
 }
 
-// -------------------- MAIN APPLICATION --------------------
+// ==========================
+// MAIN APPLICATION
+// ==========================
 public class BookMyStayApp {
 
     public static void main(String[] args) {
 
-        // Initialize Inventory
-        InventoryService inventory = new InventoryService();
-        inventory.setAvailability("Standard", 2);
-        inventory.setAvailability("Deluxe", 1);
+        Scanner scanner = new Scanner(System.in);
+        RoomInventory inventory = new RoomInventory();
 
-        // Create Booking Queue
-        BookingRequestQueue queue = new BookingRequestQueue();
-        queue.addRequest(new Reservation("Alice", "Standard"));
-        queue.addRequest(new Reservation("Bob", "Standard"));
-        queue.addRequest(new Reservation("Charlie", "Deluxe"));
-        queue.addRequest(new Reservation("David", "Deluxe")); // Should fail (only 1 available)
+        int choice;
 
-        // Create Booking Service
-        BookingService bookingService = new BookingService(inventory);
+        do {
+            System.out.println("\n===== MENU =====");
+            System.out.println("1. Book Room");
+            System.out.println("2. View Inventory");
+            System.out.println("0. Exit");
+            System.out.print("Enter choice: ");
+            choice = scanner.nextInt();
+            scanner.nextLine(); // consume newline
 
-        // Process Requests (FIFO)
-        while (!queue.isEmpty()) {
-            bookingService.processNextRequest(queue);
-        }
+            switch (choice) {
 
-        // Display Final State
-        bookingService.displayAllocations();
-        inventory.displayInventory();
+                case 1:
+                    try {
+                        // INPUT
+                        System.out.print("Enter Reservation ID: ");
+                        String id = scanner.nextLine();
+
+                        System.out.print("Enter Guest Name: ");
+                        String name = scanner.nextLine();
+
+                        System.out.print("Enter Room Type (STANDARD/DELUXE/SUITE): ");
+                        String roomType = scanner.nextLine().toUpperCase();
+
+                        // STEP 1: Basic validation (fail-fast)
+                        BookingValidator.validate(id, name, roomType);
+
+                        // STEP 2: Business validation
+                        inventory.validateRoomType(roomType);
+                        inventory.checkAvailability(roomType);
+
+                        // STEP 3: Process booking
+                        inventory.bookRoom(roomType);
+
+                        Reservation reservation = new Reservation(id, name, roomType);
+
+                        System.out.println("\n✅ Booking Successful!");
+                        System.out.println(reservation);
+
+                    } catch (InvalidBookingException |
+                             InvalidRoomTypeException |
+                             InsufficientInventoryException e) {
+
+                        // Graceful failure
+                        System.out.println("\n❌ Booking Failed: " + e.getMessage());
+                    }
+
+                    break;
+
+                case 2:
+                    inventory.printInventory();
+                    break;
+
+                case 0:
+                    System.out.println("Exiting...");
+                    break;
+
+                default:
+                    System.out.println("Invalid choice.");
+            }
+
+        } while (choice != 0);
+
+        scanner.close();
     }
 }
