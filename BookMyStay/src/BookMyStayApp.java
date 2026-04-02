@@ -1,167 +1,179 @@
 import java.util.*;
 
-// -------------------- RESERVATION --------------------
+// ==========================
+// ENTITY: Reservation
+// ==========================
 class Reservation {
+    private String reservationId;
     private String guestName;
-    private String roomType;
-    private String assignedRoomId; // Assigned after confirmation
+    private double basePrice;
 
-    public Reservation(String guestName, String roomType) {
+    public Reservation(String reservationId, String guestName, double basePrice) {
+        this.reservationId = reservationId;
         this.guestName = guestName;
-        this.roomType = roomType;
+        this.basePrice = basePrice;
     }
 
-    public String getGuestName() { return guestName; }
-    public String getRoomType() { return roomType; }
-
-    public void setAssignedRoomId(String roomId) {
-        this.assignedRoomId = roomId;
+    public String getReservationId() {
+        return reservationId;
     }
 
-    public String getAssignedRoomId() {
-        return assignedRoomId;
+    public String getGuestName() {
+        return guestName;
+    }
+
+    public double getBasePrice() {
+        return basePrice;
     }
 
     @Override
     public String toString() {
-        return "Guest: " + guestName +
-                " | Room Type: " + roomType +
-                " | Room ID: " + assignedRoomId;
+        return "Reservation ID: " + reservationId +
+                ", Guest: " + guestName +
+                ", Price: ₹" + basePrice;
     }
 }
 
-// -------------------- INVENTORY SERVICE --------------------
-class InventoryService {
-    private Map<String, Integer> availability = new HashMap<>();
+// ==========================
+// BOOKING HISTORY
+// ==========================
+class BookingHistory {
 
-    public void setAvailability(String roomType, int count) {
-        availability.put(roomType, count);
+    // Stores confirmed bookings in order
+    private List<Reservation> confirmedBookings = new ArrayList<>();
+
+    // Add confirmed reservation
+    public void addReservation(Reservation reservation) {
+        confirmedBookings.add(reservation);
     }
 
-    public int getAvailability(String roomType) {
-        return availability.getOrDefault(roomType, 0);
-    }
-
-    public void decrementAvailability(String roomType) {
-        availability.put(roomType, availability.get(roomType) - 1);
-    }
-
-    public void displayInventory() {
-        System.out.println("\nCurrent Inventory:");
-        for (String type : availability.keySet()) {
-            System.out.println(type + " -> " + availability.get(type));
-        }
+    // Get all reservations
+    public List<Reservation> getAllReservations() {
+        return new ArrayList<>(confirmedBookings); // return copy (safe)
     }
 }
 
-// -------------------- BOOKING REQUEST QUEUE --------------------
-class BookingRequestQueue {
-    private Queue<Reservation> queue = new LinkedList<>();
+// ==========================
+// REPORT SERVICE
+// ==========================
+class BookingReportService {
 
-    public void addRequest(Reservation reservation) {
-        queue.offer(reservation);
-    }
-
-    public Reservation dequeue() {
-        return queue.poll(); // FIFO
-    }
-
-    public boolean isEmpty() {
-        return queue.isEmpty();
-    }
-}
-
-// -------------------- BOOKING SERVICE (ALLOCATION LOGIC) --------------------
-class BookingService {
-
-    private InventoryService inventoryService;
-
-    // Map Room Type -> Set of Allocated Room IDs
-    private Map<String, Set<String>> allocatedRooms = new HashMap<>();
-
-    public BookingService(InventoryService inventoryService) {
-        this.inventoryService = inventoryService;
-    }
-
-    public void processNextRequest(BookingRequestQueue queue) {
-
-        Reservation reservation = queue.dequeue();
-
-        if (reservation == null) {
-            System.out.println("No pending requests.");
+    // Print all bookings
+    public void printAllBookings(List<Reservation> reservations) {
+        if (reservations.isEmpty()) {
+            System.out.println("No bookings found.");
             return;
         }
 
-        String roomType = reservation.getRoomType();
-
-        // Step 1: Check Availability
-        if (inventoryService.getAvailability(roomType) <= 0) {
-            System.out.println("No available rooms for " + roomType);
-            return;
+        System.out.println("\n=== BOOKING HISTORY ===");
+        for (Reservation r : reservations) {
+            System.out.println(r);
         }
-
-        // Step 2: Generate Unique Room ID
-        String roomId = generateRoomId(roomType);
-
-        // Step 3: Ensure uniqueness using Set
-        allocatedRooms.putIfAbsent(roomType, new HashSet<>());
-
-        if (allocatedRooms.get(roomType).contains(roomId)) {
-            System.out.println("Duplicate room ID detected! Allocation aborted.");
-            return;
-        }
-
-        // ---- ATOMIC LOGICAL OPERATION START ----
-        allocatedRooms.get(roomType).add(roomId);
-        inventoryService.decrementAvailability(roomType);
-        reservation.setAssignedRoomId(roomId);
-        // ---- ATOMIC LOGICAL OPERATION END ----
-
-        // Step 4: Confirm Reservation
-        System.out.println("Reservation Confirmed:");
-        System.out.println(reservation);
     }
 
-    // Unique Room ID Generator
-    private String generateRoomId(String roomType) {
-        return roomType.substring(0, 1).toUpperCase() + UUID.randomUUID().toString().substring(0, 5);
+    // Total revenue
+    public void printTotalRevenue(List<Reservation> reservations) {
+        double total = 0;
+        for (Reservation r : reservations) {
+            total += r.getBasePrice();
+        }
+
+        System.out.println("\nTotal Revenue: ₹" + total);
     }
 
-    public void displayAllocations() {
-        System.out.println("\nAllocated Rooms:");
-        for (String type : allocatedRooms.keySet()) {
-            System.out.println(type + " -> " + allocatedRooms.get(type));
+    // Total bookings
+    public void printTotalBookings(List<Reservation> reservations) {
+        System.out.println("\nTotal Bookings: " + reservations.size());
+    }
+
+    // Find booking by ID
+    public void findBookingById(List<Reservation> reservations, String id) {
+        for (Reservation r : reservations) {
+            if (r.getReservationId().equals(id)) {
+                System.out.println("\nFound: " + r);
+                return;
+            }
         }
+        System.out.println("\nBooking not found.");
     }
 }
 
-// -------------------- MAIN APPLICATION --------------------
+// ==========================
+// MAIN APPLICATION
+// ==========================
 public class BookMyStayApp {
 
     public static void main(String[] args) {
 
-        // Initialize Inventory
-        InventoryService inventory = new InventoryService();
-        inventory.setAvailability("Standard", 2);
-        inventory.setAvailability("Deluxe", 1);
+        Scanner scanner = new Scanner(System.in);
 
-        // Create Booking Queue
-        BookingRequestQueue queue = new BookingRequestQueue();
-        queue.addRequest(new Reservation("Alice", "Standard"));
-        queue.addRequest(new Reservation("Bob", "Standard"));
-        queue.addRequest(new Reservation("Charlie", "Deluxe"));
-        queue.addRequest(new Reservation("David", "Deluxe")); // Should fail (only 1 available)
+        BookingHistory history = new BookingHistory();
+        BookingReportService reportService = new BookingReportService();
 
-        // Create Booking Service
-        BookingService bookingService = new BookingService(inventory);
+        int choice;
 
-        // Process Requests (FIFO)
-        while (!queue.isEmpty()) {
-            bookingService.processNextRequest(queue);
-        }
+        do {
+            System.out.println("\n===== MENU =====");
+            System.out.println("1. Confirm Booking");
+            System.out.println("2. View Booking History");
+            System.out.println("3. Total Revenue");
+            System.out.println("4. Total Bookings");
+            System.out.println("5. Search Booking");
+            System.out.println("0. Exit");
+            System.out.print("Enter choice: ");
+            choice = scanner.nextInt();
+            scanner.nextLine(); // consume newline
 
-        // Display Final State
-        bookingService.displayAllocations();
-        inventory.displayInventory();
+            switch (choice) {
+
+                case 1:
+                    // Simulate booking confirmation
+                    System.out.print("Enter Reservation ID: ");
+                    String id = scanner.nextLine();
+
+                    System.out.print("Enter Guest Name: ");
+                    String name = scanner.nextLine();
+
+                    System.out.print("Enter Base Price: ");
+                    double price = scanner.nextDouble();
+                    scanner.nextLine();
+
+                    Reservation reservation = new Reservation(id, name, price);
+
+                    // Add to history
+                    history.addReservation(reservation);
+
+                    System.out.println("Booking confirmed and stored.");
+                    break;
+
+                case 2:
+                    reportService.printAllBookings(history.getAllReservations());
+                    break;
+
+                case 3:
+                    reportService.printTotalRevenue(history.getAllReservations());
+                    break;
+
+                case 4:
+                    reportService.printTotalBookings(history.getAllReservations());
+                    break;
+
+                case 5:
+                    System.out.print("Enter Reservation ID to search: ");
+                    String searchId = scanner.nextLine();
+                    reportService.findBookingById(history.getAllReservations(), searchId);
+                    break;
+
+                case 0:
+                    System.out.println("Exiting...");
+                    break;
+
+                default:
+                    System.out.println("Invalid choice.");
+            }
+
+        } while (choice != 0);
+
+        scanner.close();
     }
 }
